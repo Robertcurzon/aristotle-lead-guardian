@@ -1,0 +1,20 @@
+lead_id,created_at,name,email,phone,source,status,budget,intent,timeline_days,last_contacted_at,engagement_score,notes,assigned_to,region,service_type,preferred_channel
+L-1001,2026-06-29,Maya Patel,maya.patel@example.com,415-555-0181,Website form,New,1250000,Ready,7,,94,Asked about schools near Burlingame and wants a weekend showing,Avery,Peninsula,Buyer representation,SMS
+L-1002,2026-06-27,Jordan Lee,jordan.lee@example.com,510-555-0134,Zillow,Contacted,875000,High,21,2026-06-27,81,Clicked three condo listings and asked about HOA costs,Avery,East Bay,Buyer representation,Email
+L-1003,2026-06-21,Sofia Ramirez,sofia.ramirez@example.com,650-555-0199,Referral,Appointment,1850000,High,30,2026-06-28,88,Seller wants pricing opinion before listing in August,Casey,Peninsula,Seller consultation,Phone
+L-1004,2026-06-28,Noah Thompson,noah.thompson@example.com,408-555-0122,Open house,New,980000,Medium,45,,66,Looking for more space after second child,Casey,South Bay,Buyer representation,SMS
+L-1005,2026-06-11,Aisha Khan,aisha.khan@example.com,925-555-0166,Google Ads,Nurture,720000,Researching,120,2026-06-14,42,Downloading first-time buyer guide,Avery,East Bay,Buyer education,Email
+L-1006,2026-06-25,Liam O'Connor,liam.oconnor@example.com,415-555-0177,Past client,Contacted,2400000,Ready,14,2026-06-25,91,Considering selling rental property and buying closer to family,Casey,San Francisco,Move-up seller,Phone
+L-1007,2026-06-18,Emma Chen,emma.chen@example.com,650-555-0142,Instagram,Contacted,1100000,Medium,60,2026-06-20,57,Saved relocation checklist and asked about commute to Palo Alto,Avery,Peninsula,Relocation buyer,Email
+L-1008,2026-06-30,Marcus Brown,marcus.brown@example.com,707-555-0131,Website form,New,650000,High,10,,79,Wants investment property cash-flow examples,Casey,North Bay,Investor buyer,SMS
+L-1009,2026-06-09,Olivia Martin,olivia.martin@example.com,415-555-0155,Newsletter,Nurture,1500000,Low,180,2026-06-16,29,Reads market updates but has not replied,Avery,San Francisco,Long-term nurture,Email
+L-1010,2026-06-26,Ethan Davis,ethan.davis@example.com,408-555-0188,Google Ads,Lost,900000,Medium,90,2026-06-27,20,Chose a different agent after initial call,Casey,South Bay,Buyer representation,Email
+L-1011,2026-06-23,Grace Kim,grace.kim@example.com,510-555-0180,Referral,Contacted,1325000,High,20,2026-06-24,86,Pre-approved and wants walkable neighborhoods,Avery,East Bay,Buyer representation,SMS
+L-1012,2026-06-19,Daniel Wilson,daniel.wilson@example.com,925-555-0191,Open house,Nurture,1020000,Researching,75,2026-06-22,49,Asked about market timing and interest-rate sensitivity,Casey,East Bay,Buyer education,Email
+L-1013,2026-06-30,Priya Shah,priya.shah@example.com,650-555-0118,Website form,New,2100000,Ready,5,,96,Has accepted job offer and needs to buy before school starts,Avery,Peninsula,Relocation buyer,Phone
+L-1014,2026-06-24,Benjamin Moore,ben.moore@example.com,415-555-0108,LinkedIn,Contacted,1750000,Medium,40,2026-06-24,64,Potential seller comparing agents and commission models,Casey,San Francisco,Seller consultation,Email
+L-1015,2026-06-16,Isabella Garcia,isabella.garcia@example.com,408-555-0149,Zillow,Nurture,830000,Low,150,2026-06-18,35,Needs credit repair before pre-approval,Avery,South Bay,Buyer education,SMS
+L-1016,2026-06-29,William Johnson,will.johnson@example.com,707-555-0167,Past client,New,2600000,High,25,,77,Past buyer may sell current home if valuation is attractive,Casey,North Bay,Move-up seller,Phone
+L-1017,2026-06-22,Natalie Young,natalie.young@example.com,510-555-0113,Facebook Ads,Contacted,690000,Medium,35,2026-06-23,61,Asked about down payment assistance,Avery,East Bay,Buyer education,SMS
+L-1018,2026-06-13,Henry Walker,henry.walker@example.com,415-555-0172,Newsletter,Nurture,1450000,Researching,120,2026-06-15,44,Reads seller market reports and saved valuation page,Casey,San Francisco,Seller nurture,Email
+
