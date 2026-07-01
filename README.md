@@ -5,7 +5,7 @@
 [![Plotly](https://img.shields.io/badge/Plotly-Dashboards-3F4F75?logo=plotly&logoColor=white)](https://plotly.com/python/)
 [![Claude Ready](https://img.shields.io/badge/Claude-Optional-8B5CF6)](https://www.anthropic.com/)
 
-**Aristotle Lead Guardian** is a small-business AI agent for protecting revenue from slow follow-up. It ingests a lead list, scores urgency and conversion potential, flags SLA risk, drafts the next outreach touch, and gives the owner or sales team a focused action queue.
+**Aristotle Lead Guardian** is an AI Lead Rescue Desk for small businesses. It ingests a lead list, finds the opportunities most likely to go cold, organizes them into a daily rescue queue, and gives the owner or sales team a CRM-style workspace for approving the next follow-up.
 
 ![Aristotle Lead Guardian dashboard](docs/lead-guardian-screenshot.png)
 
@@ -15,10 +15,13 @@ The first wedge is real estate, but the data model is intentionally useful for o
 
 - Loads demo lead data or a CSV uploaded by the user.
 - Scores every lead using recency, intent, engagement, budget, timeline, status, and follow-up latency.
-- Flags hot leads, aging leads, stale opportunities, and SLA breaches.
+- Flags hot leads, missed follow-ups, stale opportunities, and SLA breaches.
+- Converts scored leads into operational rescue buckets: Rescue Now, Convert Today, Work Today, Nurture, and Monitor.
+- Provides a CRM-inspired command workspace with lead cards, pipeline lanes, conversation timelines, and owner approval controls.
+- Models GoHighLevel-style autopilot rules for instant response, missed follow-up rescue, appointment setting, cold reactivation, and review/referral requests.
 - Generates deterministic follow-up drafts without an API key.
 - Uses Claude through the Anthropic SDK when `ANTHROPIC_API_KEY` is configured.
-- Provides a daily action queue, source quality view, pipeline estimate, and CSV export.
+- Provides revenue intelligence reports, source quality views, pipeline estimates, and CSV export.
 
 ## Architecture
 
@@ -26,14 +29,17 @@ The first wedge is real estate, but the data model is intentionally useful for o
 flowchart LR
     A["Sample CSV or uploaded leads"] --> B["Schema validator"]
     B --> C["Lead scoring engine"]
-    C --> D["Priority queue"]
+    C --> D["Rescue queue"]
     C --> E["SLA risk detector"]
     C --> F["Pipeline estimator"]
-    D --> G["Follow-up agent"]
+    D --> G["Lead workspace"]
     E --> G
-    F --> H["Owner dashboard"]
-    G --> H
-    I["Optional Claude API"] --> G
+    F --> H["Pipeline board"]
+    G --> I["Follow-up agent"]
+    J["Autopilot rules"] --> I
+    K["Optional Claude API"] --> I
+    H --> L["Lead Rescue Desk"]
+    I --> L
 
     classDef data fill:#14213d,stroke:#38bdf8,color:#f8fafc;
     classDef engine fill:#1f2937,stroke:#34d399,color:#f8fafc;
@@ -41,8 +47,8 @@ flowchart LR
     classDef app fill:#12201a,stroke:#22c55e,color:#f8fafc;
     class A,B data;
     class C,D,E,F engine;
-    class G,I agent;
-    class H app;
+    class I,J,K agent;
+    class G,H,L app;
 ```
 
 ## Quickstart
