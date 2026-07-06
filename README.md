@@ -5,7 +5,7 @@
 [![Plotly](https://img.shields.io/badge/Plotly-Dashboards-3F4F75?logo=plotly&logoColor=white)](https://plotly.com/python/)
 [![Claude Ready](https://img.shields.io/badge/Claude-Optional-8B5CF6)](https://www.anthropic.com/)
 
-**Aristotle Lead Guardian** is an AI Lead Rescue Desk for small businesses. It ingests a lead list, finds the opportunities most likely to go cold, organizes them into a daily rescue queue, and gives the owner or sales team a CRM-style workspace for approving the next follow-up.
+**Aristotle Lead Guardian** is a modular AI rescue layer for small-business CRM exports. It ingests a lead list, diagnoses lead-book health, quantifies follow-up debt, estimates pipeline at risk, and produces a practical action pack for the leads most likely to go cold.
 
 ![Aristotle Lead Guardian dashboard](docs/lead-guardian-screenshot.png)
 
@@ -17,11 +17,11 @@ The first wedge is real estate, but the data model is intentionally useful for o
 - Scores every lead using recency, intent, engagement, budget, timeline, status, and follow-up latency.
 - Flags hot leads, missed follow-ups, stale opportunities, and SLA breaches.
 - Converts scored leads into operational rescue buckets: Rescue Now, Convert Today, Work Today, Nurture, and Monitor.
-- Provides a CRM-inspired command workspace with lead cards, pipeline lanes, conversation timelines, and owner approval controls.
-- Models GoHighLevel-style autopilot rules for instant response, missed follow-up rescue, appointment setting, cold reactivation, and review/referral requests.
+- Summarizes the book with digestible visuals: health score, rescue funnel, follow-up debt, source leakage, playbook mix, and rescue impact estimate.
+- Produces a top-three action pack with the recommended next touch, business reason, and generated follow-up draft.
 - Generates deterministic follow-up drafts without an API key.
 - Uses Claude through the Anthropic SDK when `ANTHROPIC_API_KEY` is configured.
-- Provides revenue intelligence reports, source quality views, pipeline estimates, and CSV export.
+- Exports an enriched lead action CSV that can be loaded back into a CRM, spreadsheet, or workflow tool.
 
 ## Architecture
 
@@ -29,17 +29,16 @@ The first wedge is real estate, but the data model is intentionally useful for o
 flowchart LR
     A["Sample CSV or uploaded leads"] --> B["Schema validator"]
     B --> C["Lead scoring engine"]
-    C --> D["Rescue queue"]
+    C --> D["Rescue metrics"]
     C --> E["SLA risk detector"]
     C --> F["Pipeline estimator"]
-    D --> G["Lead workspace"]
+    D --> G["Health score and rescue funnel"]
     E --> G
-    F --> H["Pipeline board"]
-    G --> I["Follow-up agent"]
-    J["Autopilot rules"] --> I
-    K["Optional Claude API"] --> I
-    H --> L["Lead Rescue Desk"]
-    I --> L
+    F --> H["Action pack"]
+    H --> I["Follow-up agent"]
+    J["Optional Claude API"] --> I
+    G --> K["Lead Guardian Lite"]
+    I --> K
 
     classDef data fill:#14213d,stroke:#38bdf8,color:#f8fafc;
     classDef engine fill:#1f2937,stroke:#34d399,color:#f8fafc;
@@ -47,8 +46,8 @@ flowchart LR
     classDef app fill:#12201a,stroke:#22c55e,color:#f8fafc;
     class A,B data;
     class C,D,E,F engine;
-    class I,J,K agent;
-    class G,H,L app;
+    class I,J agent;
+    class G,H,K app;
 ```
 
 ## Quickstart

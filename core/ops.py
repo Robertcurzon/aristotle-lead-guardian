@@ -170,3 +170,107 @@ def autopilot_frame() -> pd.DataFrame:
 
     return pd.DataFrame([rule.__dict__ for rule in AUTOPILOT_RULES])
 
+
+def followup_debt(scored: pd.DataFrame) -> pd.DataFrame:
+    """Bucket leads by how long they have gone without follow-up."""
+
+    debt = scored.copy()
+    debt["followup_age_days"] = debt["days_since_contact"].fillna(debt["lead_age_days"])
+    debt["bucket"] = pd.cut(
+        debt["followup_age_days"],
+        bins=[-1, 1, 3, 7, float("inf")],
+        labels=["0-24h", "1-3d", "4-7d", "7d+"],
+    )
+    grouped = (
+        debt.groupby("bucket", observed=False)
+        .agg(leads=("lead_id", "count"), pipeline_value=("pipeline_value", "sum"))
+        .reset_index()
+    )
+    return grouped
+
+
+def source_leakage(scored: pd.DataFrame) -> pd.DataFrame:
+    """Calculate missed-follow-up leakage by acquisition source."""
+
+    source = scored.copy()
+    source["leaking"] = source["sla_status"].eq("Breach") | source["days_since_contact"].gt(3)
+    grouped = (
+        source.groupby("source", dropna=False)
+        .agg(
+            leads=("lead_id", "count"),
+            leaking_leads=("leaking", "sum"),
+            pipeline_value=("pipeline_value", "sum"),
+            leaked_pipeline=("pipeline_value", lambda values: float(values[source.loc[values.index, "leaking"]].sum())),
+        )
+        .reset_index()
+    )
+    grouped["leakage_rate"] = (grouped["leaking_leads"] / grouped["leads"]).fillna(0)
+    return grouped.sort_values(["leakage_rate", "pipeline_value"], ascending=[False, False])
+
+
+def playbook_mix(queue: pd.DataFrame) -> pd.DataFrame:
+    """Summarize recommended lead rescue playbooks."""
+
+    return (
+        queue.groupby("playbook", dropna=False)
+        .agg(actions=("lead_id", "count"), pipeline_value=("pipeline_value", "sum"))
+        .reset_index()
+        .sort_values("actions", ascending=False)
+    )
+
+
+def rescue_funnel(scored: pd.DataFrame, queue: pd.DataFrame) -> pd.DataFrame:
+    """Build a high-level lead rescue funnel."""
+
+    needs_work = queue["rescue_stage"].isin(["Rescue now", "Convert today", "Work today"])
+    at_risk = scored["sla_status"].eq("Breach") | scored["priority"].isin(["Hot", "Warm"])
+    ready = queue["agent_status"].eq("Ready to send")
+    approval = queue["agent_status"].eq("Needs approval")
+    return pd.DataFrame(
+        [
+            {"stage": "Total leads", "count": int(len(scored))},
+            {"stage": "Needs work", "count": int(needs_work.sum())},
+            {"stage": "At risk", "count": int(at_risk.sum())},
+            {"stage": "Ready to send", "count": int(ready.sum())},
+            {"stage": "Human approval", "count": int(approval.sum())},
+        ]
+    )
+
+
+def agent_workload(queue: pd.DataFrame) -> dict[str, int]:
+    """Return counts for agent-ready and human-review work."""
+
+    return {
+        "total_actions": int(queue["rescue_stage"].isin(["Rescue now", "Convert today", "Work today"]).sum()),
+        "ready_to_send": int(queue["agent_status"].eq("Ready to send").sum()),
+        "needs_approval": int(queue["agent_status"].eq("Needs approval").sum()),
+    }
+
+
+def lead_book_health_score(scored: pd.DataFrame) -> int:
+    """Calculate a compact 0-100 lead book health score."""
+
+    if scored.empty:
+        return 0
+    active = scored.loc[~scored["status"].astype(str).str.lower().isin(["won", "lost"])]
+    if active.empty:
+        return 100
+    sla_health = 1 - active["sla_status"].eq("Breach").mean()
+    hot = active.loc[active["priority"].eq("Hot")]
+    hot_coverage = 1.0 if hot.empty else 1 - hot["sla_status"].eq("Breach").mean()
+    recent_followup = active["days_since_contact"].fillna(active["lead_age_days"]).le(3).mean()
+    score = (0.45 * sla_health + 0.35 * hot_coverage + 0.20 * recent_followup) * 100
+    return int(round(max(0, min(100, score))))
+
+
+def rescue_impact_estimate(scored: pd.DataFrame, recovery_rate: float = 0.20, commission_rate: float = 0.03) -> dict[str, float]:
+    """Estimate upside if a share of at-risk pipeline is recovered."""
+
+    risk = at_risk_pipeline(scored)
+    recovered_pipeline = risk * recovery_rate
+    estimated_revenue = recovered_pipeline * commission_rate
+    return {
+        "at_risk_pipeline": risk,
+        "recovered_pipeline": recovered_pipeline,
+        "estimated_revenue": estimated_revenue,
+    }

@@ -16,11 +16,29 @@ import streamlit as st
 
 from agents.followup_agent import generate_followup
 from config.settings import settings
-from core.ops import action_queue, at_risk_pipeline, autopilot_frame, conversation_timeline, pipeline_summary
+from core.ops import (
+    action_queue,
+    agent_workload,
+    at_risk_pipeline,
+    followup_debt,
+    lead_book_health_score,
+    playbook_mix,
+    rescue_funnel,
+    rescue_impact_estimate,
+    source_leakage,
+)
 from core.schema import load_sample_leads, validate_lead_frame
-from core.scoring import score_leads, source_summary, summarize_leads
+from core.scoring import score_leads, source_summary
 from dashboard.components.cards import metric_card
-from dashboard.components.charts import priority_distribution, score_vs_timeline, source_pipeline
+from dashboard.components.charts import (
+    followup_debt_chart,
+    health_gauge,
+    playbook_mix_chart,
+    rescue_funnel_chart,
+    score_vs_timeline,
+    source_leakage_chart,
+    source_pipeline,
+)
 from dashboard.layout import configure_page, render_hero
 
 
@@ -55,8 +73,15 @@ def _load_input(use_sample: bool, uploaded_file) -> pd.DataFrame | None:
     return pd.read_csv(uploaded_file)
 
 
-def _lead_label(row: pd.Series) -> str:
-    return f"{row['rescue_stage']} | {row['name']} | {row['source']} | {_compact_money(float(row['pipeline_value']))}"
+def _demo_analysis_date(raw: pd.DataFrame, use_sample: bool) -> pd.Timestamp | None:
+    """Pin bundled demo scoring to the sample's own timeline."""
+
+    if not use_sample or "created_at" not in raw.columns:
+        return None
+    latest = pd.to_datetime(raw["created_at"], errors="coerce").max()
+    if pd.isna(latest):
+        return None
+    return latest.normalize()
 
 
 def _chip_class(value: str) -> str:
@@ -69,135 +94,104 @@ def _chip_class(value: str) -> str:
     return "chip"
 
 
-def _render_lead_card(row: pd.Series) -> None:
+def _render_action_card(row: pd.Series, rank: int) -> None:
     name = html.escape(str(row["name"]))
     source = html.escape(str(row["source"]))
     playbook = html.escape(str(row["playbook"]))
     action = html.escape(str(row["recommended_action"]))
+    reason = html.escape(str(row["risk_reason"]))
     priority = html.escape(str(row["priority"]))
     stage = html.escape(str(row["rescue_stage"]))
-    sla = html.escape(str(row["sla_status"]))
     pipeline = _compact_money(float(row["pipeline_value"]))
     st.markdown(
         f"""
         <div class="lead-card">
+            <div class="lead-card-meta">#{rank} Action Pack</div>
             <div class="lead-card-title">{name}</div>
             <div class="lead-card-meta">{source} - {pipeline} weighted pipeline - {playbook}</div>
             <div class="chip-row">
                 <span class="{_chip_class(str(row['rescue_stage']))}">{stage}</span>
                 <span class="{_chip_class(str(row['priority']))}">{priority}</span>
-                <span class="{_chip_class(str(row['sla_status']))}">{sla}</span>
+                <span class="{_chip_class(str(row['agent_status']))}">{html.escape(str(row['agent_status']))}</span>
             </div>
-            <div class="lead-card-action">{action}</div>
+            <div class="lead-card-action"><strong>Next:</strong> {action}<br><strong>Why:</strong> {reason}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _select_lead(queue: pd.DataFrame, label: str = "Lead") -> dict[str, object]:
-    labels = [_lead_label(row) for _, row in queue.iterrows()]
-    current = st.session_state.get("selected_lead_label", labels[0])
-    index = labels.index(current) if current in labels else 0
-    selected = st.selectbox(label, labels, index=index)
-    st.session_state["selected_lead_label"] = selected
-    return queue.iloc[labels.index(selected)].to_dict()
+def _render_action_pack(queue: pd.DataFrame, vertical: str, tone: str, key_prefix: str) -> None:
+    st.subheader("Today's Top 3 Action Pack")
+    top = queue.head(3)
+    cols = st.columns(3)
+    for idx, (col, (_, row)) in enumerate(zip(cols, top.iterrows(), strict=True), start=1):
+        with col:
+            _render_action_card(row, idx)
 
-
-def _render_agent_workspace(lead: dict[str, object], vertical: str, tone: str) -> None:
+    labels = [f"{row['name']} - {row['playbook']} - {_compact_money(float(row['pipeline_value']))}" for _, row in queue.iterrows()]
+    selected = st.selectbox("Open full action pack", labels, key=f"{key_prefix}_lead_select")
+    lead = queue.iloc[labels.index(selected)].to_dict()
     lcol, rcol = st.columns([0.38, 0.62])
     with lcol:
         st.markdown("#### Lead Brief")
         st.write(f"**Name:** {lead['name']}")
         st.write(f"**Status:** {lead['status']} | **Priority:** {lead['priority']} ({lead['lead_score']:.1f}/100)")
-        st.write(f"**SLA:** {lead['sla_status']} | **Playbook:** {lead['playbook']}")
+        st.write(f"**Action status:** {lead['agent_status']}")
         st.write(f"**Pipeline:** {_money(float(lead['pipeline_value']))}")
         st.write(f"**Recommended action:** {lead['recommended_action']}")
         st.write(f"**Why now:** {lead['risk_reason']}")
-        b1, b2, b3 = st.columns(3)
-        b1.button("Approve", use_container_width=True)
-        b2.button("Edit", use_container_width=True)
-        b3.button("Skip", use_container_width=True)
     with rcol:
-        st.markdown("#### Agent Draft")
+        st.markdown("#### Drafted Next Touch")
         st.markdown(_async_text(generate_followup(lead, vertical=vertical, tone=tone)))
 
 
-def _render_timeline(lead: dict[str, object]) -> None:
-    for event in conversation_timeline(lead):
-        st.markdown(
-            f"""
-            <div class="timeline-item">
-                <div class="timeline-label">{html.escape(event["label"])}</div>
-                <div class="timeline-date">{html.escape(event["date"])}</div>
-                <div class="timeline-body">{html.escape(event["body"])}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+def _render_overview(scored: pd.DataFrame, queue: pd.DataFrame) -> None:
+    health = lead_book_health_score(scored)
+    workload = agent_workload(queue)
+    debt = followup_debt(scored)
+    leakage = source_leakage(scored)
+    funnel = rescue_funnel(scored, queue)
+    playbooks = playbook_mix(queue)
+    impact = rescue_impact_estimate(scored)
 
+    debt_count = int(debt.loc[debt["bucket"].isin(["4-7d", "7d+"]), "leads"].sum())
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("Health Score", f"{health}/100", "Response and follow-up coverage")
+    with c2:
+        metric_card("Pipeline At Risk", _compact_money(impact["at_risk_pipeline"]), "Hot, warm, or overdue")
+    with c3:
+        metric_card("Follow-Up Debt", str(debt_count), "Leads 4+ days quiet")
+    with c4:
+        metric_card("Agent Actions", str(workload["total_actions"]), f"{workload['ready_to_send']} ready, {workload['needs_approval']} review")
 
-def _render_pipeline_board(queue: pd.DataFrame, stages: pd.DataFrame) -> None:
-    st.markdown("#### Pipeline Board")
-    cols = st.columns(len(stages))
-    for col, stage in zip(cols, stages.itertuples(), strict=True):
-        stage_rows = queue.loc[queue["status"].eq(stage.status)].head(4)
-        with col:
-            st.markdown(f"**{stage.status}**")
-            st.caption(f"{int(stage.leads)} leads - {_compact_money(float(stage.pipeline_value))}")
-            if stage_rows.empty:
-                st.caption("No active leads")
-            for _, row in stage_rows.iterrows():
-                _render_lead_card(row)
-
-
-def _render_command(queue: pd.DataFrame, stages: pd.DataFrame, vertical: str, tone: str, queue_size: int) -> None:
-    st.subheader("Today's Rescue Desk")
-    left, right = st.columns([0.46, 0.54])
+    left, right = st.columns([0.38, 0.62])
     with left:
-        st.markdown("#### Priority Queue")
-        for _, row in queue.head(queue_size).iterrows():
-            _render_lead_card(row)
+        st.plotly_chart(health_gauge(health), width="stretch")
+        st.markdown("#### Rescue Impact")
+        st.write(f"If 20% of at-risk pipeline is recovered, projected recovered pipeline is **{_compact_money(impact['recovered_pipeline'])}**.")
+        st.write(f"At a 3% revenue/commission assumption, that is roughly **{_compact_money(impact['estimated_revenue'])}**.")
     with right:
-        lead = _select_lead(queue, "Open lead workspace")
-        _render_agent_workspace(lead, vertical=vertical, tone=tone)
-    _render_pipeline_board(queue, stages)
+        st.plotly_chart(rescue_funnel_chart(funnel), width="stretch")
+
+    v1, v2 = st.columns(2)
+    with v1:
+        st.plotly_chart(followup_debt_chart(debt), width="stretch")
+    with v2:
+        st.plotly_chart(source_leakage_chart(leakage), width="stretch")
+
+    st.plotly_chart(playbook_mix_chart(playbooks), width="stretch")
 
 
-def _render_conversations(queue: pd.DataFrame, vertical: str, tone: str) -> None:
-    st.subheader("Conversation Workspace")
-    lead = _select_lead(queue, "Conversation lead")
-    lcol, rcol = st.columns([0.42, 0.58])
-    with lcol:
-        st.markdown("#### Timeline")
-        _render_timeline(lead)
-    with rcol:
-        _render_agent_workspace(lead, vertical=vertical, tone=tone)
-
-
-def _render_autopilot() -> None:
-    st.subheader("Agent Autopilot")
-    st.caption("These controls model how the agent would run inside a CRM or GoHighLevel-style operating stack.")
-    rules = autopilot_frame()
-    for rule in rules.itertuples():
-        c1, c2 = st.columns([0.08, 0.92])
-        with c1:
-            st.toggle("", value=bool(rule.enabled), key=f"rule_{rule.Index}", label_visibility="collapsed")
-        with c2:
-            st.markdown(f"**{rule.name}**")
-            st.caption(f"Trigger: {rule.trigger}")
-            st.caption(f"Action: {rule.action}")
-            st.caption("Owner review required" if rule.owner_review else "Runs automatically")
-
-
-def _render_reports(scored: pd.DataFrame, sources: pd.DataFrame) -> None:
-    st.subheader("Revenue Intelligence")
-    left, right = st.columns([0.58, 0.42])
+def _render_diagnostics(scored: pd.DataFrame) -> None:
+    sources = source_summary(scored)
+    st.subheader("Diagnostics")
+    left, right = st.columns([0.55, 0.45])
     with left:
         st.plotly_chart(score_vs_timeline(scored), width="stretch")
     with right:
-        st.plotly_chart(priority_distribution(scored), width="stretch")
-    st.plotly_chart(source_pipeline(sources), width="stretch")
+        st.plotly_chart(source_pipeline(sources), width="stretch")
     st.dataframe(sources.style.format({"avg_score": "{:.1f}", "pipeline_value": "${:,.0f}"}), width="stretch")
 
 
@@ -207,27 +201,23 @@ def main() -> None:
     configure_page()
     render_hero()
 
-    st.sidebar.markdown("#### Workspace")
-    workspace = st.sidebar.radio(
-        "Navigation",
-        ["Command", "Pipeline", "Conversations", "Autopilot", "Reports", "Export"],
-        label_visibility="collapsed",
-    )
-
-    st.sidebar.markdown("#### Data Source")
-    use_sample = st.sidebar.toggle("Use bundled demo leads", value=True)
-    uploaded_file = st.sidebar.file_uploader("Upload lead CSV", type=["csv"], disabled=use_sample)
-    vertical = st.sidebar.selectbox(
-        "Business vertical",
-        ["Real estate", "Roofing", "HVAC", "Med spa", "Agency", "Consulting", "Insurance", "Local services"],
-        index=0,
-    )
-    tone = st.sidebar.selectbox("Follow-up tone", ["warm and direct", "premium and concise", "friendly and helpful"], index=0)
-    queue_size = st.sidebar.slider("Action queue size", min_value=3, max_value=15, value=8)
+    with st.expander("Inputs & CSV Upload", expanded=False):
+        c1, c2 = st.columns([0.34, 0.66])
+        with c1:
+            use_sample = st.toggle("Use bundled demo leads", value=True)
+            vertical = st.selectbox(
+                "Business vertical",
+                ["Real estate", "Roofing", "HVAC", "Med spa", "Agency", "Consulting", "Insurance", "Local services"],
+                index=0,
+            )
+            tone = st.selectbox("Follow-up tone", ["warm and direct", "premium and concise", "friendly and helpful"], index=0)
+        with c2:
+            uploaded_file = st.file_uploader("Upload lead CSV", type=["csv"], disabled=use_sample)
+            st.caption("Use the bundled sample for demo mode, or upload a CRM/export CSV that matches the documented schema.")
 
     raw = _load_input(use_sample, uploaded_file)
     if raw is None:
-        st.info("Upload a CSV to activate the Lead Rescue Desk, or switch on bundled demo leads in the sidebar.")
+        st.info("Upload a CSV to activate the Lead Guardian analysis, or switch on bundled demo leads in the sidebar.")
         st.stop()
 
     validation = validate_lead_frame(raw)
@@ -237,44 +227,30 @@ def main() -> None:
     if validation.extra_columns:
         st.warning(f"Extra columns ignored by the scoring engine: {', '.join(validation.extra_columns)}")
 
-    scored = score_leads(raw)
+    scored = score_leads(raw, now=_demo_analysis_date(raw, use_sample))
     queue = action_queue(scored)
-    summary = summarize_leads(scored)
-    sources = source_summary(scored)
-    stages = pipeline_summary(scored)
 
     with st.expander("Data Preview", expanded=False):
         st.dataframe(raw.head(8), width="stretch")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        metric_card("Leads To Work", str(len(queue.loc[queue["rescue_stage"].isin(["Rescue now", "Convert today", "Work today"])])), "Human or agent action today")
-    with c2:
-        metric_card("Rescue Now", str(summary["sla_breaches"]), "SLA risk")
-    with c3:
-        metric_card("At-Risk Pipeline", _compact_money(at_risk_pipeline(scored)), "Hot, warm, or breached")
-    p1, _p2 = st.columns([0.62, 0.38])
-    with p1:
-        metric_card("Best Source", str(summary["top_source"]), _compact_money(float(summary["pipeline_value"])))
+    mode = st.radio(
+        "View",
+        ["Overview", "Action Pack", "Diagnostics", "Export"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
-    if workspace == "Command":
-        _render_command(queue, stages, vertical=vertical, tone=tone, queue_size=queue_size)
-    elif workspace == "Pipeline":
-        _render_pipeline_board(queue, stages)
-        st.dataframe(
-            stages.style.format({"pipeline_value": "${:,.0f}", "avg_score": "{:.1f}"}),
-            width="stretch",
-        )
-    elif workspace == "Conversations":
-        _render_conversations(queue, vertical=vertical, tone=tone)
-    elif workspace == "Autopilot":
-        _render_autopilot()
-    elif workspace == "Reports":
-        _render_reports(scored, sources)
+    if mode == "Overview":
+        _render_overview(scored, queue)
+        _render_action_pack(queue, vertical=vertical, tone=tone, key_prefix="overview")
+    elif mode == "Action Pack":
+        _render_action_pack(queue, vertical=vertical, tone=tone, key_prefix="actions")
+    elif mode == "Diagnostics":
+        _render_diagnostics(scored)
     else:
         export = queue.to_csv(index=False).encode("utf-8")
         st.subheader("Export")
-        st.download_button("Download scored rescue queue CSV", data=export, file_name="lead_rescue_queue.csv", mime="text/csv")
+        st.download_button("Download lead action pack CSV", data=export, file_name="lead_action_pack.csv", mime="text/csv")
         st.dataframe(queue, width="stretch")
 
     if not settings.anthropic_api_key:

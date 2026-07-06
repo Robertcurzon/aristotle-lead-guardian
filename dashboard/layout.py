@@ -10,7 +10,7 @@ from config.settings import settings
 def configure_page() -> None:
     """Configure Streamlit page and app CSS."""
 
-    st.set_page_config(page_title=settings.brand_name, page_icon="AG", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title=settings.brand_name, page_icon="AG", layout="wide", initial_sidebar_state="collapsed")
     st.markdown(
         """
         <style>
@@ -52,10 +52,10 @@ def render_hero() -> None:
     st.markdown(
         """
         <div class="ag-hero">
-            <div class="ag-title">AI Lead Rescue Desk</div>
+            <div class="ag-title">Lead Guardian Lite</div>
             <div class="ag-subtitle">
-                A small-business revenue operator for finding missed opportunities, prioritizing the next touch,
-                and turning lead follow-up into a visible daily workflow.
+                A modular AI rescue layer for CRM exports: diagnose lead-book health, quantify follow-up debt,
+                and produce a practical action pack for the leads most likely to go cold.
             </div>
         </div>
         """,
